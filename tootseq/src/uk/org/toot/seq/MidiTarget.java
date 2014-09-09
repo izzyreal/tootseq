@@ -18,14 +18,10 @@ import javax.sound.midi.ShortMessage;
 import uk.org.toot.midi.message.NoteMsg;
 
 /**
- * MidiTarget extends MidiSource to provide a 1:1 mapping between EventSources and
- * MessageTargets. This allows the source of MidiEvents to also control the destination
- * of the resulting MidiMessages.
- * Only MidiPlayer makes use of MidiTarget.
  * @author st
  *
  */
-public abstract class MidiTarget extends Source
+public abstract class MidiTarget
 {
 	public interface MessageTarget
 	{
@@ -46,7 +42,7 @@ public abstract class MidiTarget extends Source
 	 * transportImpl() should be implemented by subclasses.
 	 * @author st
 	 */
-	public abstract static class AbstractMessageTarget implements MessageTarget, Track
+	public abstract static class AbstractMessageTarget implements MessageTarget
 	{
 		private NoteOnCache noteOnCache;
 		

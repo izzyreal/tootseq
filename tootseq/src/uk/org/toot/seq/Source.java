@@ -8,6 +8,8 @@ package uk.org.toot.seq;
 import java.util.List;
 import java.util.Observable;
 
+import javax.sound.midi.MidiMessage;
+
 /**
  * A Source is a composite event iterator. This is the contract required
  * by a Sequencer to be able to use arbitrary track based representations
@@ -19,37 +21,6 @@ import java.util.Observable;
  * implementation. Clients of this class need not know about any such
  * representation or any specific implementation of this class.
  * 
- * There are a few edge cases in iteration.
- * 
- * Assume we have notes X then Y and X has already been consumed such that
- * peek() and next() would both return Y. At some point peek() will return Y and
- * its tick will indicate that it is ready to play so we would proceed to obtain
- * it with next(). If inbetween peek() and next() the model is altered such that
- * note Z is inserted between X and Y there are two eventualities. next() will
- * now return Z. It may be too late to play in which case it should be ignored
- * but it may be that it should play in which case it will be played and peek()
- * and next() would subsequently obtain note Y which next() was originally
- * expecting. So in this case an apparent race condition with note insertion
- * near the current iterator position is handled properly.
- * 
- * Again, assume we have notes X then Y then Z and X has already been consumed such that
- * peek() and next() would both return Y. At some point peek() will return Y and
- * its tick will indicate that it is ready to play so we would proceed to obtain
- * it with next(). If inbetween peek() and next() the model is altered such that
- * Y is deleted next() will return Z. It may be that Z is too early to be played
- * in which case next() has consumed it too early and Z would not subsequently
- * be played at the appropriate time. In this case the race condition with note deletion
- * near the current iterator position is not handled properly and notes may be lost.
- * It should be noted that this race condition typically only occurs if a note is deleted
- * at exactly the millisecond it becomes playable, it is unlikely but possible.
- * 
- * Assume we have notes X then Y and X has already been consumed such that
- * peek() and next() would both return Y. Assume X is deleted. This may require
- * the iterator to reposition itself such that next() still returns Y.
- * 
- * In general an iterator should not maintain position by referencing the next note.
- * The next note may be varying as new notes are added, so it is arguably best practice to
- * maintain position by referencing the previous note.
  * 
  * Note that this class is a composition of iterators, it can only be used by one client
  * at a time.
@@ -110,12 +81,15 @@ public abstract class Source extends Observable
 	protected boolean isSyncing() { return syncing; }
 	
 	/**
-	 * An iterator of MidiEvents.
-	 * We don't implement hasNext() because in general there is no iterator
-	 * termination, another MidiEvent may be created at ant time. Also, if there
-	 * is a next MidiEvent we want to know what it is in order to examine its tick.
-	 * MidiEvent tick values should monotonically increase even if repositioning or looping.
-	 * @author st
+	 * An implementation may override this null implementation to send
+	 * MidiMessages for MTC to relevant places.
+	 * @param msg
+	 */
+	protected void receiveMTC(MidiMessage msg) {}
+	
+	/**
+	 * An iterator of arbitrary tick-based events which is able to play
+	 * events at the correct time and control the event output in other ways.
 	 */
 	public interface Track
 	{
@@ -130,15 +104,15 @@ public abstract class Source extends Observable
 		 */
 		public void playNext();
 		
-		/*
+		/**
 		 * Turn this track off, turn notes off etc.
 		 * With midi affect conmtroller if stop (otherwise not in mute)
 		 */
 		public void off(boolean stop);
 		
 		/**
-		 * Return the name of the EventSource, which should be unique
-		 * for each EventSource belonging to this MidiSource.
+		 * Return our name, which should be unique
+		 * for each Track belonging to this Source.
 		 * @return our name
 		 */
 		public String getName();

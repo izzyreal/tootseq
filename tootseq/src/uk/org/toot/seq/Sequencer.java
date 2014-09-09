@@ -14,32 +14,9 @@ import javax.sound.midi.MidiMessage;
 import static uk.org.toot.midi.message.MetaMsg.*;
 
 /**
- * MidiPlayer plays MIDI from MidiSources in real-time. It is the real-time part
- * of a 'sequencer'. It cannot support controller chasing, repositioning while
- * running, or looping. It cannot easily support mute/solo because the List of
- * EventSources may be dynamic. These operations must be provided by individual
- * MidiSource implementations as appropriate.
- * 
- * Effectively we solve the law of motion: distance = velocity * time.
- * 
- * Distance is measured in ticks, velocity in bpm and time is, well, time.
- * Note that this equation merely represents a constant velocity but MIDI only
- * supports instantaneous transitions between constant tempos (velocities) so
- * total distance is the accumulation of a contiguous series of these linear
- * segments.
- * 
- * Because we only have knowledge of the current linear segment and the
- * accumulation of all previous linear segments we are unable to calculate the
- * position for arbitrary times that are outside the current linear segment.
- * Fundamentally this is why we cannot reposition or loop, we can't convert an
- * arbitrary time to a position. In principle we could cache details of all
- * linear segments but this does not scale well (we can play for over 200
- * million years, with position accurately calculated to within 1 millisecond,
- * which could be a very large cache) and is arguably best performed by a
- * MidiSource which may already have such a cache in practice.
- * 
- * @author st
- * 
+ * Sequencer events from Sources in real-time. 
+ *
+ * @author st 
  */
 public class Sequencer extends Observable
 {
@@ -54,7 +31,7 @@ public class Sequencer extends Observable
 	private long elapsedMillis; 	// elapsed time within current segment
 	private float ticksPerMilli;	// velocity of current segment
 	
-    private Source source;
+    protected Source source;
 
 	/**
 	 * A lock object, required to make the accumulation of elapsedMillis into
@@ -68,12 +45,12 @@ public class Sequencer extends Observable
 	 */
 	private Object milliLock = new Object();
 
-	public void setMidiSource(Source source) {
+	public void setSource(Source source) {
 		if ( running ) {
-			throw new IllegalStateException("Can't set MidiSource while playing");
+			throw new IllegalStateException("Can't set Source while playing");
 		}
         if ( source == null ) {
-            throw new IllegalArgumentException("MidiSource can't be null");
+            throw new IllegalArgumentException("Source can't be null");
         }
         this.source = source;
         source.returnToZero(); // just in case it isn't
@@ -87,7 +64,7 @@ public class Sequencer extends Observable
 	 */
 	public void play() {
 		if ( source == null ) {
-			throw new IllegalStateException("MidiSource is null");
+			throw new IllegalStateException("Source is null");
 		}
 		if ( running ) return;
 		setRunning(true);
@@ -103,11 +80,11 @@ public class Sequencer extends Observable
 	}
 	
 	/**
-	 * As if setMidiSource() had been called again.
+	 * As if setSource() had been called again.
 	 */
 	public void returnToZero() {
 		if ( source == null ) {
-			throw new IllegalStateException("MidiSource is null");
+			throw new IllegalStateException("Source is null");
 		}
 		// to avoid synchronisation issues
 		if ( running ) {
@@ -128,7 +105,7 @@ public class Sequencer extends Observable
 
 	/**
 	 * Get the current tick position.
-	 * @return the tick position in the MidiSource
+	 * @return the tick position in the Source
 	 */
 	public long getTickPosition() {
 		return getCurrentTimeTicks();
@@ -136,7 +113,7 @@ public class Sequencer extends Observable
 	
 	/**
 	 * Get the current millisecond position
-	 * @return the millisecond position in the MidiSource
+	 * @return the millisecond position in the Source
 	 */
 	public long getMillisecondPosition() {
 		synchronized ( milliLock ) {
@@ -186,7 +163,7 @@ public class Sequencer extends Observable
 	}
 	
 	protected void notesOff() {
-		for ( Source.Track trk : eventSources() ) {
+		for ( Source.Track trk : source.getTracks() ) {
 				trk.off(true);
 			}			
 		}		
@@ -197,13 +174,7 @@ public class Sequencer extends Observable
 		setRunning(false);
 	}
 	
-	protected List<Source.Track> eventSources() {
-		if ( source == null ) {
-			throw new IllegalStateException("MidiSource is null");
-		}
-		return source.getTracks();
-	}
-	
+	// !!! TODO move elsewhere related to midi
 	protected void check(MidiEvent event) {
 		MidiMessage msg = event.getMessage();
 		if ( isMeta(msg) ) {
@@ -246,13 +217,13 @@ public class Sequencer extends Observable
 	}
 	
 	/**
-     * Pump MidiMessages as they become due.
+     * Pump events as they become due.
      * @param targetTick the tick to pump until.
-     * @return true if every peek() returned null, false otherwise
+     * @return true if every Track has nothing left to play
      */
     protected boolean pump(long targetTick) {
     	boolean empty = true;
-    	for ( Source.Track trk : eventSources() ) {
+    	for ( Source.Track trk : source.getTracks() ) {
     		while ( trk.getNextTick() <= targetTick ) {
                 empty = false;
     			trk.playNext();
@@ -262,9 +233,7 @@ public class Sequencer extends Observable
     }
 
     /**
-	 * PlayEngine encapsulates the real-time thread to avoid run() being public in MidiPlayer.
-	 * @author st
-	 *
+	 * PlayEngine encapsulates the real-time thread to avoid run() being public.
 	 */
 	private class PlayEngine implements Runnable 
 	{

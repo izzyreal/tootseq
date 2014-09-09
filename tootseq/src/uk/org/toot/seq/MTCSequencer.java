@@ -13,15 +13,15 @@ import uk.org.toot.midi.message.TimeMsg;
 import uk.org.toot.midi.message.MTC;
 
 /**
- * A MidiPlayer that generates Quarter Frame MTC messages.
- * MTC messages are sent to the first MidiTarget.MessageTarget in the list.
+ * A Sequencer that generates Quarter Frame MTC messages.
+ * MTC messages are sent to the Source.
  * MTC Messages are sent on the nearest millisecond, this has minimal jitter for
  * 25 fps and up to 0.5 millisecond jitter for 24 and 30 fps, plus any thread
  * timing jitter.
  * We also send a Full MTC message on returnToZero().
  * Default frame rate is 25fps.
+ * 
  * @author st
- *
  */
 public class MTCSequencer extends Sequencer
 {
@@ -127,7 +127,7 @@ public class MTCSequencer extends Sequencer
 			try {
 				MidiMessage msg = CommonMsg.createMTCQuarterFrame(qf, time, rate);
 				if ( msg != null ) {
-					transportMTC(msg);
+					source.receiveMTC(msg);
 				}
 			} catch ( InvalidMidiDataException imde ) {
 				failures++;
@@ -144,18 +144,10 @@ public class MTCSequencer extends Sequencer
 		// send Full MTC message
 		time.clear();
 		try {
-			MidiMessage msg = TimeMsg.createMTCFull(0x7f, time, rate);
-			transportMTC(msg);
+			source.receiveMTC(TimeMsg.createMTCFull(0x7f, time, rate));
 		} catch ( InvalidMidiDataException imde ) {
 			failures++;
 			System.err.println("Failed to create MTC Full message");
 		}
 	}
-	
-	protected void transportMTC(MidiMessage msg) {
-		Source.Track src = eventSources().get(0);
-		if ( src instanceof MidiTarget.MessageTarget ) {
-			((MidiTarget.MessageTarget) src).transport(msg);
-		}		
-	}	
 }
