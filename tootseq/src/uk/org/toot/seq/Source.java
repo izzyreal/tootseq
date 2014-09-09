@@ -30,6 +30,8 @@ import javax.sound.midi.MidiMessage;
  */
 public abstract class Source extends Observable
 {
+    protected String name;
+    
     /**
      * @return the List of Tracks
      */
@@ -38,7 +40,9 @@ public abstract class Source extends Observable
 	/**
 	 * @return the name of this Source 
 	 */
-	public abstract String getName();
+	public String getName() {
+	    return name;
+	}
 	
 	/**
 	 * @return the resolution in ticks per quarter note
@@ -105,9 +109,11 @@ public abstract class Source extends Observable
 	 */
 	public interface Track
 	{
+	    public final static long MAX_TICK = Long.MAX_VALUE;
+	    
 		/**
 		 * Return the next event tick without changing iterator position.
-		 * @return the next tick or LONG_MAX if none
+		 * @return the next tick or MAX_TICK if none
 		 */
 		public long getNextTick();
 		

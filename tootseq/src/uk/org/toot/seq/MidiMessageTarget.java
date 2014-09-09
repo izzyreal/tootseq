@@ -24,7 +24,7 @@ import uk.org.toot.midi.core.MidiTransport;
  * It encapsulates a note on cache to hide the messy details.
  * @author st
  */
-public abstract class MidiMessageTarget implements MidiTransport
+public class MidiMessageTarget implements MidiTransport
 {
     /**
      * The implementation which is decorated
