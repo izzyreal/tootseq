@@ -212,25 +212,9 @@ public class Sequencer extends Observable
 			reposition(cmd.getMillis(), cmd.getTick());
 		}
 		// repositioning means the current tick may have changed
-		return pump(getCurrentTimeTicks());
+		return source.playToTick(getCurrentTimeTicks());
 	}
 	
-	/**
-     * Pump events as they become due.
-     * @param targetTick the tick to pump until.
-     * @return true if every Track has nothing left to play
-     */
-    protected boolean pump(long targetTick) {
-    	boolean empty = true;
-    	for ( Source.Track trk : source.getTracks() ) {
-    		while ( trk.getNextTick() <= targetTick ) {
-                empty = false;
-    			trk.playNext();
-    		}
-    	}
-    	return empty;
-    }
-
     /**
 	 * PlayEngine encapsulates the real-time thread to avoid run() being public.
 	 */

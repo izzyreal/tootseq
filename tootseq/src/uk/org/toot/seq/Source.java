@@ -30,15 +30,13 @@ import javax.sound.midi.MidiMessage;
  */
 public abstract class Source extends Observable
 {
-	/**
-	 * Note that the first Track in the List should contain those events
-	 * which are restricted to the first track of a type 1 standard midi file. e.g. Tempo
-	 * @return the List of EventSources
-	 */
+    /**
+     * @return the List of Tracks
+     */
 	public abstract List<Track> getTracks();
 
 	/**
-	 * @return the name of this source 
+	 * @return the name of this Source 
 	 */
 	public abstract String getName();
 	
@@ -48,22 +46,23 @@ public abstract class Source extends Observable
 	public abstract int getResolution();
 	
 	/**
-	 * Should only be called by the client, the client will behave 
+	 * Should only be called by the Sequencer, the Sequencer will behave 
 	 * incorrectly if anything else calls it.
 	 */
-	public abstract void returnToZero();
+	abstract void returnToZero();
 	
 	/**
-	 * Should only be called by the client.
+	 * Should only be called by the Sequencer.
 	 * This method is called synchronously by the client, each time before it obtains
 	 * the List of Tracks. It is the only time the implementor is allowed to
 	 * mutate the List of Tracks.
 	 * Failure to mutate the underlying List only in this method will likely result
 	 * in ConcurrentModificationExceptions being thrown.
+	 * Returning a RepositionCommand allows looping or other position changing.
 	 * @param currentTick the tick the client is currently at, useful for recording
 	 * @return a RepositionCommand or null
 	 */
-	public RepositionCommand sync(long currentTick) {
+	RepositionCommand sync(long currentTick) {
 		return null; 
 	}
 	
@@ -72,10 +71,29 @@ public abstract class Source extends Observable
 	 * MidiMessages for MTC to relevant places.
 	 * @param msg
 	 */
-	public void receiveMTC(MidiMessage msg) {
+	void receiveMTC(MidiMessage msg) {
 	}
 	
-	public void stop() {
+    /**
+     * Play events as they become due.
+     * @param targetTick the tick to play until.
+     * @return true if every Track has nothing left to play
+     */
+    boolean playToTick(long targetTick) {
+        boolean empty = true;
+        for ( Track trk : getTracks() ) {
+            while ( trk.getNextTick() <= targetTick ) {
+                empty = false;
+                trk.playNext();
+            }
+        }
+        return empty;
+    }
+
+    /**
+     * Turn off track outputs on a stop condition
+     */
+ 	void stop() {
 	    for ( Track trk : getTracks() ) {
 	        trk.off(true);
 	    }           
