@@ -1,4 +1,4 @@
-// Copyright (C) 2009 Steve Taylor.
+// Copyright (C) 2009, 2010, 2014 Steve Taylor.
 // Distributed under the Toot Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
 // http://www.toot.org.uk/LICENSE_1_0.txt)
@@ -30,8 +30,6 @@ import javax.sound.midi.MidiMessage;
  */
 public abstract class Source extends Observable
 {
-	private boolean syncing = false;
-	
 	/**
 	 * Note that the first Track in the List should contain those events
 	 * which are restricted to the first track of a type 1 standard midi file. e.g. Tempo
@@ -59,33 +57,29 @@ public abstract class Source extends Observable
 	 * Should only be called by the client.
 	 * This method is called synchronously by the client, each time before it obtains
 	 * the List of Tracks. It is the only time the implementor is allowed to
-	 * mutate the List of Tracks. Some clients of may not call sync() 
-	 * because they are not prepared to accept mutations to the List of Tracks.
+	 * mutate the List of Tracks.
 	 * Failure to mutate the underlying List only in this method will likely result
 	 * in ConcurrentModificationExceptions being thrown.
 	 * @param currentTick the tick the client is currently at, useful for recording
 	 * @return a RepositionCommand or null
 	 */
 	public RepositionCommand sync(long currentTick) {
-		syncing = true;
 		return null; 
 	}
-	
-	/**
-	 * An implementation may only mutate the List and reposition the client
-	 * if this method returns true. This method is provided so that an
-	 * implementation explicitly knows whether these operations are supported,
-	 * but these operations will simply not function if they are not supported.
-	 * @return whether List mutation and client repositioning is available
-	 */
-	protected boolean isSyncing() { return syncing; }
 	
 	/**
 	 * An implementation may override this null implementation to send
 	 * MidiMessages for MTC to relevant places.
 	 * @param msg
 	 */
-	protected void receiveMTC(MidiMessage msg) {}
+	public void receiveMTC(MidiMessage msg) {
+	}
+	
+	public void stop() {
+	    for ( Track trk : getTracks() ) {
+	        trk.off(true);
+	    }           
+	}
 	
 	/**
 	 * An iterator of arbitrary tick-based events which is able to play
@@ -106,7 +100,7 @@ public abstract class Source extends Observable
 		
 		/**
 		 * Turn this track off, turn notes off etc.
-		 * With midi affect conmtroller if stop (otherwise not in mute)
+		 * With Midi, reset controllers if stop (otherwise not in mute)
 		 */
 		public void off(boolean stop);
 		

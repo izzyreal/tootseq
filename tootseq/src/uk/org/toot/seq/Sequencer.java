@@ -1,11 +1,10 @@
-// Copyright (C) 2009 Steve Taylor.
+// Copyright (C) 2009, 2010, 2014 Steve Taylor.
 // Distributed under the Toot Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
 // http://www.toot.org.uk/LICENSE_1_0.txt)
 
 package uk.org.toot.seq;
 
-import java.util.List;
 import java.util.Observable;
 
 import javax.sound.midi.MidiEvent;
@@ -49,23 +48,19 @@ public class Sequencer extends Observable
 		if ( running ) {
 			throw new IllegalStateException("Can't set Source while playing");
 		}
-        if ( source == null ) {
-            throw new IllegalArgumentException("Source can't be null");
-        }
         this.source = source;
+        checkSource();
+        init();
         source.returnToZero(); // just in case it isn't
-		init();
 		source.sync(0); // quickly inform source we support syncing
-		notesOff();
+        source.stop();
 	}
 
 	/**
 	 * Start playing
 	 */
 	public void play() {
-		if ( source == null ) {
-			throw new IllegalStateException("Source is null");
-		}
+        checkSource();
 		if ( running ) return;
 		setRunning(true);
 		playEngine = new PlayEngine();
@@ -83,9 +78,7 @@ public class Sequencer extends Observable
 	 * As if setSource() had been called again.
 	 */
 	public void returnToZero() {
-		if ( source == null ) {
-			throw new IllegalStateException("Source is null");
-		}
+        checkSource();
 		// to avoid synchronisation issues
 		if ( running ) {
 			throw new IllegalStateException("Can't returnToZero while playing");
@@ -125,10 +118,39 @@ public class Sequencer extends Observable
 	 * Get the current tempo in beats per minute.
 	 * @return the current tempo
 	 */
-	public float getBeatsPerMinute() {
+	public float getBpm() {
 		return bpm;
 	}
 	
+    /**
+     * Set the bpm starting at the tick
+     * @param bpm beats per minute
+     * @param tick
+     */
+    public void setBpm(float bpm, long tick) {
+        checkSource();
+        ticksPerMilli = source.getResolution() * bpm / 60000;
+        this.bpm = bpm; 
+        // start a new linear segment
+        accumTicks = tick; // by definition
+        synchronized ( milliLock ) {
+            accumMillis += elapsedMillis;
+            // about to be reset but ensure consistency for getMillisecondPosition()
+            elapsedMillis = 0;
+        }
+        refMillis = getCurrentTimeMillis();
+    }
+
+    // !!! TODO move elsewhere related to midi
+    protected void check(MidiEvent event) {
+        MidiMessage msg = event.getMessage();
+        if ( isMeta(msg) ) {
+            if ( getType(msg) == TEMPO ) {
+                setBpm(getTempo(msg), event.getTick());
+            }
+        }
+    }
+    
 	/**
 	 * Allow the default stop on empty to be changed in the unlikely event playing
 	 * should proceed even when there is nothing to play at any point in the future.
@@ -142,19 +164,12 @@ public class Sequencer extends Observable
 		setBpm(120, 0);
 		accumMillis = 0L;		
 	}
-	
-	public void setBpm(float bpm, long tick) {
-		ticksPerMilli = source.getResolution() * bpm / 60000;
-		this.bpm = bpm;	
-        // start a new linear segment
-        accumTicks = tick; // by definition
-        synchronized ( milliLock ) {
-            accumMillis += elapsedMillis;
-            // about to be reset but ensure consistency for getMillisecondPosition()
-            elapsedMillis = 0;
+
+	protected void checkSource() {
+	    if ( source == null ) {
+	        throw new IllegalStateException("Source is null");
         }
-        refMillis = getCurrentTimeMillis();
-}
+	}
 
 	protected void setRunning(boolean r) {
 		running = r;
@@ -162,26 +177,10 @@ public class Sequencer extends Observable
 		notifyObservers();		
 	}
 	
-	protected void notesOff() {
-		for ( Source.Track trk : source.getTracks() ) {
-				trk.off(true);
-			}			
-		}		
-
 	// to be called when pumping has stopped
 	protected void stopped() {
-		notesOff();
+        source.stop();
 		setRunning(false);
-	}
-	
-	// !!! TODO move elsewhere related to midi
-	protected void check(MidiEvent event) {
-		MidiMessage msg = event.getMessage();
-		if ( isMeta(msg) ) {
-			if ( getType(msg) == TEMPO ) {
-				setBpm(getTempo(msg), event.getTick());
-			}
-		}
 	}
 	
 	// only to be called synchronously with real-time thread
@@ -204,8 +203,8 @@ public class Sequencer extends Observable
 	}
 	
 	/**
-	 * to be called when pumping
-	 * @return true if peek() on all MidiSource.Events sources returne null, false otherwise.
+	 * to be called when pumping.
+	 * @return true every Track has nothing left to play.
 	 */ 
 	protected boolean pump() {
 		Source.RepositionCommand cmd = source.sync(getCurrentTimeTicks());
