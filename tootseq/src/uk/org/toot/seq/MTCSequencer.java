@@ -87,10 +87,9 @@ public class MTCSequencer extends Sequencer
 	}
 	
 	@Override
-	protected boolean pump() {
-		boolean ret = super.pump();
+	protected void pump() {
+		super.pump();
 		if ( mtcEnabled ) checkQFdue(getMillisecondPosition());
-		return ret;
 	}
 	
 	/**

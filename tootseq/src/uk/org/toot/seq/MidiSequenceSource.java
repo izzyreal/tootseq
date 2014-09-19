@@ -58,7 +58,7 @@ public class MidiSequenceSource extends Source
 	/**
 	 * Should only be called by the Sequencer.
 	 */
-	void returnToZero() {
+	protected void returnToZero() {
 		for ( SequenceTrack trk : tracks ) {
 			trk.returnToZero();
 		}

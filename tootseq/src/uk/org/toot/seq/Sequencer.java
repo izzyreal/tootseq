@@ -21,7 +21,6 @@ public class Sequencer extends Observable
 {
 	private PlayEngine playEngine;
 	private boolean running = false;
-	private boolean stopOnEmpty = true;
 	private float bpm;
 	
 	private long accumTicks;		// accumulated ticks up to current segment
@@ -51,9 +50,9 @@ public class Sequencer extends Observable
         this.source = source;
         checkSource();
         init();
-        source.returnToZero(); // just in case it isn't
-		source.sync(0); // quickly inform source we support syncing
-        source.stop();
+        source.returnToZero();  // just in case it isn't
+		source.sync(0);         // quickly inform source we support syncing
+        source.stopped();
 	}
 
 	/**
@@ -151,15 +150,6 @@ public class Sequencer extends Observable
         }
     }
     
-	/**
-	 * Allow the default stop on empty to be changed in the unlikely event playing
-	 * should proceed even when there is nothing to play at any point in the future.
-	 * @param soe
-	 */
-	public void setStopOnEmpty(boolean soe) {
-		stopOnEmpty = soe;
-	}
-	
 	protected void init() {
 		setBpm(120, 0);
 		accumMillis = 0L;		
@@ -179,7 +169,7 @@ public class Sequencer extends Observable
 	
 	// to be called when pumping has stopped
 	protected void stopped() {
-        source.stop();
+        source.stopped();
 		setRunning(false);
 	}
 	
@@ -204,15 +194,14 @@ public class Sequencer extends Observable
 	
 	/**
 	 * to be called when pumping.
-	 * @return true every Track has nothing left to play.
 	 */ 
-	protected boolean pump() {
+	protected void pump() {
 		Source.RepositionCommand cmd = source.sync(getCurrentTimeTicks());
 		if ( cmd != null ) {
 			reposition(cmd.getMillis(), cmd.getTick());
 		}
 		// repositioning means the current tick may have changed
-		return source.playToTick(getCurrentTimeTicks());
+		source.playToTick(getCurrentTimeTicks());
 	}
 	
     /**
@@ -243,7 +232,7 @@ public class Sequencer extends Observable
 			boolean complete = false;
 			while ( (thread == thisThread) && !complete ) {
 				elapsedMillis = getCurrentTimeMillis() - refMillis;
-				complete = pump() && stopOnEmpty;
+				pump();
 				try {
 					Thread.sleep(1);
 				} catch (InterruptedException ie) {

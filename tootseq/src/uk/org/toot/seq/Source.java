@@ -8,8 +8,6 @@ package uk.org.toot.seq;
 import java.util.List;
 import java.util.Observable;
 
-import javax.sound.midi.MidiMessage;
-
 /**
  * A Source is a composite event iterator. This is the contract required
  * by a Sequencer to be able to use arbitrary track based representations
@@ -21,7 +19,6 @@ import javax.sound.midi.MidiMessage;
  * implementation. Clients of this class need not know about any such
  * representation or any specific implementation of this class.
  * 
- * 
  * Note that this class is a composition of iterators, it can only be used by one client
  * at a time.
  * 
@@ -30,13 +27,11 @@ import javax.sound.midi.MidiMessage;
  */
 public abstract class Source extends Observable
 {
+    /*
+     * set this in subclass
+     */
     protected String name;
     
-    /**
-     * @return the List of Tracks
-     */
-	public abstract List<Track> getTracks();
-
 	/**
 	 * @return the name of this Source 
 	 */
@@ -49,11 +44,16 @@ public abstract class Source extends Observable
 	 */
 	public abstract int getResolution();
 	
+    /**
+     * @return the List of Tracks
+     */
+    public abstract List<Track> getTracks();
+
 	/**
 	 * Should only be called by the Sequencer, the Sequencer will behave 
 	 * incorrectly if anything else calls it.
 	 */
-	abstract void returnToZero();
+	protected abstract void returnToZero();
 	
 	/**
 	 * Should only be called by the Sequencer.
@@ -66,38 +66,36 @@ public abstract class Source extends Observable
 	 * @param currentTick the tick the client is currently at, useful for recording
 	 * @return a RepositionCommand or null
 	 */
-	RepositionCommand sync(long currentTick) {
+	protected RepositionCommand sync(long currentTick) {
 		return null; 
 	}
 	
 	/**
 	 * An implementation may override this null implementation to send
-	 * MidiMessages for MTC to relevant places.
+	 * MidiMessages for MTC to relevant places (when the client is an MTCSequencer).
 	 * @param msg
 	 */
-	void receiveMTC(MidiMessage msg) {
+	protected void receiveMTC(javax.sound.midi.MidiMessage msg) {
 	}
 	
     /**
+     * Should only be called by the Sequencer.
      * Play events as they become due.
      * @param targetTick the tick to play until.
-     * @return true if every Track has nothing left to play
      */
-    boolean playToTick(long targetTick) {
-        boolean empty = true;
+    protected void playToTick(long targetTick) {
         for ( Track trk : getTracks() ) {
             while ( trk.getNextTick() <= targetTick ) {
-                empty = false;
                 trk.playNext();
             }
         }
-        return empty;
     }
 
     /**
+     * Should only be called by the Sequencer.
      * Turn off track outputs on a stop condition
      */
- 	void stop() {
+ 	protected void stopped() {
 	    for ( Track trk : getTracks() ) {
 	        trk.off(true);
 	    }           
