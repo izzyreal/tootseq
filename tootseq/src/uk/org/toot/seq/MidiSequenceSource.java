@@ -5,7 +5,9 @@
 
 package uk.org.toot.seq;
 
+import static uk.org.toot.midi.message.MetaMsg.TEMPO;
 import static uk.org.toot.midi.message.MetaMsg.getString;
+import static uk.org.toot.midi.message.MetaMsg.getTempo;
 import static uk.org.toot.midi.message.MetaMsg.getType;
 import static uk.org.toot.midi.message.MetaMsg.isMeta;
 import static uk.org.toot.midi.message.MetaMsg.TRACK_NAME;
@@ -73,7 +75,7 @@ public class MidiSequenceSource extends Source
 		public SequenceTrack(int trk, javax.sound.midi.Track track) {
 			this.track = track;
 			String aname = getMetaName(TRACK_NAME);
-			name = aname == null ? "Player: Track "+(1+trk) : "Player: "+aname;
+			name = aname == null ? "Track "+(1+trk) : aname;
 		}
 		
 		public long getNextTick() {
@@ -83,7 +85,17 @@ public class MidiSequenceSource extends Source
 
 		public void playNext() {
 			if ( index >= track.size() ) return;
-			target.transport(track.get(index++).getMessage(), 0L);
+	        MidiMessage msg = track.get(index++).getMessage();
+	        // MetaEvents should only occur on the first track
+	        // but they should never be transported externally so we
+	        // filter them out here and act on some of them anyway.
+	        if ( isMeta(msg) ) {
+	            if ( getType(msg) == TEMPO ) {
+	                setBpm(getTempo(msg));
+	            }
+	        } else {
+	            target.transport(msg, 0L);
+	        }
 		}
 		
 		public void off(boolean stop) {

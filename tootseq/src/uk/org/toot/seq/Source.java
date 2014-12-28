@@ -27,6 +27,8 @@ import java.util.Observable;
  */
 public abstract class Source extends Observable
 {
+    private SynchronousControl control;
+    
     /*
      * set this in subclass
      */
@@ -49,6 +51,15 @@ public abstract class Source extends Observable
      */
     public abstract List<Track> getTracks();
 
+    /**
+     * Called by the Sequencer once when it begins using this source to
+     * privately provide us with its synchronous control interface
+     * @param ctl
+     */
+    protected void control(SynchronousControl ctl) {
+        control = ctl;
+    }
+    
 	/**
 	 * Should only be called by the Sequencer, the Sequencer will behave 
 	 * incorrectly if anything else calls it.
@@ -62,20 +73,11 @@ public abstract class Source extends Observable
 	 * mutate the List of Tracks.
 	 * Failure to mutate the underlying List only in this method will likely result
 	 * in ConcurrentModificationExceptions being thrown.
-	 * Returning a RepositionCommand allows looping or other position changing.
+	 * If the currentTick is outside the range to be played the implementation
+	 * should call reposition() to reposition the client at the next tick to be played.
 	 * @param currentTick the tick the client is currently at, useful for recording
-	 * @return a RepositionCommand or null
 	 */
-	protected RepositionCommand sync(long currentTick) {
-		return null; 
-	}
-	
-	/**
-	 * An implementation may override this null implementation to send
-	 * MidiMessages for MTC to relevant places (when the client is an MTCSequencer).
-	 * @param msg
-	 */
-	protected void receiveMTC(javax.sound.midi.MidiMessage msg) {
+	protected void sync(long currentTick) {
 	}
 	
     /**
@@ -101,6 +103,27 @@ public abstract class Source extends Observable
 	    }           
 	}
 	
+ 	/**
+ 	 * Should be called as a result of a call to playToTick()
+ 	 * Typically when the Track representing the tempo map is 'played' and tempo
+ 	 * events are reached.
+ 	 * @param bpm
+ 	 */
+ 	protected void setBpm(float bpm) {
+ 	    if ( control != null ) control.setBpm(bpm);
+ 	}
+ 	
+ 	/**
+ 	 * Should be called from sync() when required.
+ 	 * When sync() is passed a tick value outside the range the be played
+ 	 * call this method with the first tick within the range to be played.
+ 	 * @param millis
+ 	 * @param tick
+ 	 */
+ 	protected void reposition(long millis, long tick) {
+ 	    if ( control != null ) control.reposition(millis, tick);
+ 	}
+ 	
 	/**
 	 * An iterator of arbitrary tick-based events which is able to play
 	 * events at the correct time and control the event output in other ways.
@@ -135,24 +158,13 @@ public abstract class Source extends Observable
 	}
 	
 	/**
-	 * A way of repositioning the client in real-time requiring both time
-	 * in milliseconds and tick be provided.
-	 * An instance of this class may be synchronously returned to the client
-	 * via sync().
-	 * @author st
+	 * The interface used to call back to the Sequencer synchronously with
+	 * its real time thread.
 	 */
-	public class RepositionCommand
+	protected interface SynchronousControl
 	{
-		private long millis;
-		private long tick;
-		
-		public RepositionCommand(long millis, long tick) {
-			this.millis = millis;
-			this.tick = tick;
-		}
-		
-		public long getMillis() { return millis; }
-		
-		public long getTick() { return tick; }
+	    public void setBpm(float bpm);
+	    
+	    public void reposition(long millis, long tick);	    
 	}
 }

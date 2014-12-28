@@ -7,11 +7,6 @@ package uk.org.toot.seq;
 
 import java.util.Observable;
 
-import javax.sound.midi.MidiEvent;
-import javax.sound.midi.MidiMessage;
-
-import static uk.org.toot.midi.message.MetaMsg.*;
-
 /**
  * Sequencer events from Sources in real-time. 
  *
@@ -28,9 +23,12 @@ public class Sequencer extends Observable
 	private long refMillis;			// wall time at start of current segment
 	private long elapsedMillis; 	// elapsed time within current segment
 	private float ticksPerMilli;	// velocity of current segment
+	private float tempoFactor = 1f; // tempu factor for bpm
 	
     protected Source source;
 
+    private SynchronousControl control = new SynchronousControl();
+    
 	/**
 	 * A lock object, required to make the accumulation of elapsedMillis into
 	 * accumMillis and the associated zeroing of elapsedMillis atomic so that
@@ -50,8 +48,8 @@ public class Sequencer extends Observable
         this.source = source;
         checkSource();
         init();
+        source.control(control);
         source.returnToZero();  // just in case it isn't
-		source.sync(0);         // quickly inform source we support syncing
         source.stopped();
 	}
 
@@ -115,43 +113,32 @@ public class Sequencer extends Observable
 	
 	/**
 	 * Get the current tempo in beats per minute.
+	 * This will be the actual tempo scaled by the tempo factor
+	 * rather than the requested tempo.
 	 * @return the current tempo
 	 */
 	public float getBpm() {
 		return bpm;
 	}
 	
-    /**
-     * Set the bpm starting at the tick
-     * @param bpm beats per minute
-     * @param tick
-     */
-    public void setBpm(float bpm, long tick) {
-        checkSource();
-        ticksPerMilli = source.getResolution() * bpm / 60000;
-        this.bpm = bpm; 
-        // start a new linear segment
-        accumTicks = tick; // by definition
-        synchronized ( milliLock ) {
-            accumMillis += elapsedMillis;
-            // about to be reset but ensure consistency for getMillisecondPosition()
-            elapsedMillis = 0;
-        }
-        refMillis = getCurrentTimeMillis();
-    }
-
-    // !!! TODO move elsewhere related to midi
-    protected void check(MidiEvent event) {
-        MidiMessage msg = event.getMessage();
-        if ( isMeta(msg) ) {
-            if ( getType(msg) == TEMPO ) {
-                setBpm(getTempo(msg), event.getTick());
-            }
-        }
-    }
-    
+	/**
+	 * Set the tempo factor, sensible bounds should be enforced by the caller
+	 * as apprpriate.
+	 * @param f the tempo factor
+	 */
+	public void setTempofactor(float f) {
+	    tempoFactor = f;
+	}
+	
+	/**
+	 * @return the tempo factor
+	 */
+	public float getTempofactor() {
+	    return tempoFactor;
+	}
+	
 	protected void init() {
-		setBpm(120, 0);
+		setBpm(120);
 		accumMillis = 0L;		
 	}
 
@@ -173,12 +160,28 @@ public class Sequencer extends Observable
 		setRunning(false);
 	}
 	
+    // only to be called synchronously with real-time thread
+	// typically through the SynchronousControl object
+    protected void setBpm(float bpm) {
+        checkSource();
+        bpm *= tempoFactor; // scale by tempo factor
+        ticksPerMilli = source.getResolution() * bpm / 60000;
+        this.bpm = bpm; 
+        // start a new linear segment
+        synchronized ( milliLock ) {
+            accumMillis += elapsedMillis;
+            // about to be reset but ensure consistency for getMillisecondPosition()
+            elapsedMillis = 0;
+        }
+        refMillis = getCurrentTimeMillis();
+    }
+
 	// only to be called synchronously with real-time thread
-	// we increment the values so the next pump has a millisecond interval to play
+    // typically through the SynchronousControl object
 	protected void reposition(long millis, long tick) {
-		accumTicks = (long)(tick + ticksPerMilli);
+		accumTicks = tick;
 		synchronized ( milliLock ) {
-			accumMillis = millis + 1;
+			accumMillis = millis;
 			elapsedMillis = 0;
 		}
 		refMillis = getCurrentTimeMillis();
@@ -196,10 +199,7 @@ public class Sequencer extends Observable
 	 * to be called when pumping.
 	 */ 
 	protected void pump() {
-		Source.RepositionCommand cmd = source.sync(getCurrentTimeTicks());
-		if ( cmd != null ) {
-			reposition(cmd.getMillis(), cmd.getTick());
-		}
+		source.sync(getCurrentTimeTicks());
 		// repositioning means the current tick may have changed
 		source.playToTick(getCurrentTimeTicks());
 	}
@@ -214,9 +214,9 @@ public class Sequencer extends Observable
 		PlayEngine() {
 			// nearly MAX_PRIORITY
 			int priority = Thread.NORM_PRIORITY
-			+ ((Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) * 3) / 4;
+			    + ((Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) * 3) / 4;
 			thread = new Thread(this);
-			thread.setName("Toot MidiPlayer - "+source.getName());
+			thread.setName("Toot Sequencer - "+source.getName());
 			thread.setPriority(priority);
 			refMillis = getCurrentTimeMillis(); // prevent badval on 1st getTickPosition()
 			thread.start();
@@ -246,5 +246,21 @@ public class Sequencer extends Observable
 			}
 			stopped(); // turns off active notes, resets some controllers
 		}
+	}
+	
+	/**
+	 * private to prevent instantiation by any other class
+	 * exposes the synchronous interface to the Source privately
+	 */
+	private class SynchronousControl implements Source.SynchronousControl
+	{
+        public void reposition(long millis, long tick) {
+            Sequencer.this.reposition(millis, tick);
+        }
+
+         public void setBpm(float bpm) {
+            Sequencer.this.setBpm(bpm);
+            
+        }	    
 	}
 }
