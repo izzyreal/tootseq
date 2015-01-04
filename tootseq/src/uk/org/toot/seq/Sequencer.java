@@ -151,11 +151,22 @@ public class Sequencer extends Observable
         notifyObservers();      
     }
 
+    // should be accurate to better than a microsecond on moder platforms
     protected long getCurrentTimeMicros() {
         return System.nanoTime() / 1000L;
     }
 
-    // if the current tick changes during this iteration sync the source
+    // split out from pump so we can sync before first timing interval
+    protected void sync() {
+        long reposTick = source.sync(tickPosition);
+        if ( reposTick >= 0 ) {
+            tickPosition = reposTick;
+            deltaTicks = 0f;
+        }
+        source.playToTick(tickPosition);
+    }
+    
+    // sync if the tick changes during this timing interval
     protected void pump(int deltaMicros) {
         float deltaMinutes = deltaMicros * 0.001f * MINUTES_PER_MILLISECOND;
         deltaTicks += deltaMinutes * bpm * ticksPerQuarter * tempoFactor;
@@ -163,13 +174,7 @@ public class Sequencer extends Observable
             int nTicks = (int)deltaTicks;
             deltaTicks -= nTicks;
             tickPosition += nTicks;
-            long reposTick = source.sync(tickPosition);
-            if ( reposTick >= 0 ) {
-                tickPosition = reposTick;
-                deltaTicks = 0f;
-            }
-            // repositioning means the tick position may have changed
-            source.playToTick(tickPosition);
+            sync();
         }
     }
 
@@ -197,17 +202,17 @@ public class Sequencer extends Observable
 
         public void run() {
             prevMicros = getCurrentTimeMicros();
+            sync(); // first sync at start tick
             Thread thisThread = Thread.currentThread();
-            boolean complete = false;
-            while ( (thread == thisThread) && !complete ) {
-                nowMicros = getCurrentTimeMicros();
-                pump((int)(nowMicros - prevMicros));
-                prevMicros = nowMicros;
+            while ( thread == thisThread ) {
                 try {
                     Thread.sleep(1);
                 } catch (InterruptedException ie) {
                     // ignore
                 }
+                nowMicros = getCurrentTimeMicros();
+                pump((int)(nowMicros - prevMicros));
+                prevMicros = nowMicros;
             }
             stopped(); // turns off active notes, resets some controllers
         }
