@@ -151,14 +151,6 @@ public class Sequencer extends Observable
         notifyObservers();      
     }
 
-    // only to be called synchronously with real-time thread
-    // typically through the SynchronousControl object
-    // if anything except the Source calls this the Source will get very confused
-    protected void reposition(long tick) {
-        tickPosition = tick;
-        deltaTicks = 0; // by definition
-    }
-
     protected long getCurrentTimeMicros() {
         return System.nanoTime() / 1000L;
     }
@@ -171,9 +163,13 @@ public class Sequencer extends Observable
             int nTicks = (int)deltaTicks;
             deltaTicks -= nTicks;
             tickPosition += nTicks;
-            source.sync(getTickPosition());
+            long reposTick = source.sync(tickPosition);
+            if ( reposTick >= 0 ) {
+                tickPosition = reposTick;
+                deltaTicks = 0f;
+            }
             // repositioning means the tick position may have changed
-            source.playToTick(getTickPosition());
+            source.playToTick(tickPosition);
         }
     }
 
@@ -223,10 +219,6 @@ public class Sequencer extends Observable
      */
     private class SynchronousControl implements Source.SynchronousControl
     {
-        public void reposition(long tick) {
-            Sequencer.this.reposition(tick);
-        }
-
         public void setBpm(float bpm) {
             Sequencer.this.setBpm(bpm);
 

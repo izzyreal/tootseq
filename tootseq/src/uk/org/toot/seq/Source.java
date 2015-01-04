@@ -76,8 +76,10 @@ public abstract class Source extends Observable
 	 * If the currentTick is outside the range to be played the implementation
 	 * should call reposition() to reposition the client at the next tick to be played.
 	 * @param currentTick the tick the client is currently at, useful for recording
+	 * @return the tick to reposition to or -1
 	 */
-	protected void sync(long currentTick) {
+	protected long sync(long currentTick) {
+	    return -1L;
 	}
 	
     /**
@@ -111,16 +113,6 @@ public abstract class Source extends Observable
  	 */
  	protected void setBpm(float bpm) {
  	    if ( control != null ) control.setBpm(bpm);
- 	}
- 	
- 	/**
- 	 * Should be called from sync() when required.
- 	 * When sync() is passed a tick value outside the range the be played
- 	 * call this method with the first tick within the range to be played.
- 	 * @param tick
- 	 */
- 	protected void reposition(long tick) {
- 	    if ( control != null ) control.reposition(tick);
  	}
  	
 	/**
@@ -163,7 +155,5 @@ public abstract class Source extends Observable
 	protected interface SynchronousControl
 	{
 	    public void setBpm(float bpm);
-	    
-	    public void reposition(long tick);	    
 	}
 }
