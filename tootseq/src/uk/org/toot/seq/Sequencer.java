@@ -158,12 +158,8 @@ public class Sequencer extends Observable
 
     // split out from pump so we can sync before first timing interval
     protected void sync() {
-        long reposTick = source.sync(tickPosition);
-        if ( reposTick >= 0 ) {
-            tickPosition = reposTick;
-            deltaTicks = 0f;
-        }
-        source.playToTick(tickPosition);
+       tickPosition += source.sync(tickPosition);
+       source.playToTick(tickPosition);
     }
     
     // sync if the tick changes during this timing interval

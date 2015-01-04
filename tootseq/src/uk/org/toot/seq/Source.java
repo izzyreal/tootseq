@@ -74,12 +74,12 @@ public abstract class Source extends Observable
 	 * Failure to mutate the underlying List only in this method will likely result
 	 * in ConcurrentModificationExceptions being thrown.
 	 * If the currentTick is outside the range to be played the implementation
-	 * should call reposition() to reposition the client at the next tick to be played.
+	 * should return an offset to reposition the client by.
 	 * @param currentTick the tick the client is currently at, useful for recording
-	 * @return the tick to reposition to or -1
+	 * @return the offset to apply to the tick for repositioning, 0 if none
 	 */
 	protected long sync(long currentTick) {
-	    return -1L;
+	    return 0L;
 	}
 	
     /**
