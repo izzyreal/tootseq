@@ -17,7 +17,6 @@ public class Sequencer extends Observable
     private static float MINUTES_PER_MILLISECOND = 1f / 60000;
 
     private float tempoFactor = 1f;     // not reset by init 
-    private boolean running = false;    // must be initalised before init()
     
     // these variables are initialised by init()
     private float bpm;	
@@ -25,12 +24,12 @@ public class Sequencer extends Observable
     private long tickPosition;		    // accumulated ticks
     private float deltaTicks;           // pre-wrap delta
 
-    private PlayEngine playEngine;
+    private PlayEngine playEngine = null;
     private Source source;
     private SynchronousControl control = new SynchronousControl();
 
     public void setSource(Source source) {
-        if ( running ) {
+        if ( isRunning() ) {
             throw new IllegalStateException("Can't set Source while playing");
         }
         this.source = source;
@@ -46,17 +45,19 @@ public class Sequencer extends Observable
      */
     public void play() {
         checkSource();
-        if ( running ) return;
-        setRunning(true);
+        if ( isRunning() ) return;
         playEngine = new PlayEngine();
+        setChanged();
+        notifyObservers();      
     }
 
     /**
      * Commence stopping.
      */
     public void stop() {
-        if ( !running ) return;
+        if ( !isRunning() ) return;
         playEngine.stop();
+        // observers are notified after the engine actually stops
     }
 
     /**
@@ -65,7 +66,7 @@ public class Sequencer extends Observable
     public void returnToZero() {
         checkSource();
         // to avoid synchronisation issues
-        if ( running ) {
+        if ( isRunning() ) {
             throw new IllegalStateException("Can't returnToZero while playing");
         }
         source.returnToZero();
@@ -78,7 +79,7 @@ public class Sequencer extends Observable
      * @return true if playing (or stopping), false if stopped
      */
     public boolean isRunning() {
-        return running;
+        return playEngine != null;
     }
 
     /**
@@ -142,16 +143,12 @@ public class Sequencer extends Observable
         }
     }
 
-    protected void setRunning(boolean r) {
-        running = r;
-        setChanged();
-        notifyObservers();		
-    }
-
     // to be called when pumping has stopped
     protected void stopped() {
         source.stopped();
-        setRunning(false);
+        playEngine = null;
+        setChanged();
+        notifyObservers();      
     }
 
     // only to be called synchronously with real-time thread
@@ -159,6 +156,7 @@ public class Sequencer extends Observable
     // if anything except the Source calls this the Source will get very confused
     protected void reposition(long tick) {
         tickPosition = tick;
+        deltaTicks = 0; // by definition
     }
 
     protected long getCurrentTimeMicros() {
