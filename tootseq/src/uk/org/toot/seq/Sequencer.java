@@ -173,9 +173,9 @@ public class Sequencer extends Observable
             int nTicks = (int)deltaTicks;
             deltaTicks -= nTicks;
             tickPosition += nTicks;
-            source.sync(tickPosition);
+            source.sync(getTickPosition());
             // repositioning means the tick position may have changed
-            source.playToTick(tickPosition);
+            source.playToTick(getTickPosition());
         }
     }
 
