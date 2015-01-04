@@ -34,9 +34,11 @@ public class Sequencer extends Observable
         }
         this.source = source;
         checkSource();
-        init();
+        setBpm(120);
+        ticksPerQuarter = source.getResolution();
+        tickPosition = 0;
+        deltaTicks = 0f;
         source.control(control);
-        source.returnToZero();  // just in case it isn't
         source.stopped();
     }
 
@@ -58,19 +60,6 @@ public class Sequencer extends Observable
         if ( !isRunning() ) return;
         playEngine.stop();
         // observers are notified after the engine actually stops
-    }
-
-    /**
-     * As if setSource() had been called again.
-     */
-    public void returnToZero() {
-        checkSource();
-        // to avoid synchronisation issues
-        if ( isRunning() ) {
-            throw new IllegalStateException("Can't returnToZero while playing");
-        }
-        source.returnToZero();
-        init();
     }
 
     /**
@@ -105,16 +94,6 @@ public class Sequencer extends Observable
     }
 
     /**
-     * Get the current tempo in beats per minute.
-     * This will be the actual tempo scaled by the tempo factor
-     * rather than the requested tempo.
-     * @return the current tempo
-     */
-    public float getActualBpm() {
-        return bpm * tempoFactor;
-
-    }
-    /**
      * Set the tempo factor, sensible bounds should be enforced by the caller
      * as apprpriate.
      * @param f the tempo factor
@@ -130,20 +109,13 @@ public class Sequencer extends Observable
         return tempoFactor;
     }
 
-    protected void init() {
-        setBpm(120);
-        ticksPerQuarter = source.getResolution();
-        tickPosition = 0;
-        deltaTicks = 0f;
-    }
-
     protected void checkSource() {
         if ( source == null ) {
             throw new IllegalStateException("Source is null");
         }
     }
 
-    // to be called when pumping has stopped
+    // called when pumping has stopped
     protected void stopped() {
         source.stopped();
         playEngine = null;

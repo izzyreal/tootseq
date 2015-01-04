@@ -57,15 +57,6 @@ public class MidiSequenceSource extends Source
 		return sequence.getResolution();
 	}
 	
-	/**
-	 * Should only be called by the Sequencer.
-	 */
-	protected void returnToZero() {
-		for ( SequenceTrack trk : tracks ) {
-			trk.returnToZero();
-		}
-	}
-	
 	protected class SequenceTrack implements Track
 	{
 		private javax.sound.midi.Track track;
@@ -100,10 +91,6 @@ public class MidiSequenceSource extends Source
 		
 		public void off(boolean stop) {
 		    target.notesOff(stop);
-		}
-		
-		public void returnToZero() {
-			index = 0;
 		}
 		
 		public String getName() {

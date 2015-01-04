@@ -61,12 +61,6 @@ public abstract class Source extends Observable
     }
     
 	/**
-	 * Should only be called by the Sequencer, the Sequencer will behave 
-	 * incorrectly if anything else calls it.
-	 */
-	protected abstract void returnToZero();
-	
-	/**
 	 * Should only be called by the Sequencer.
 	 * This method is called synchronously by the client, each time before it obtains
 	 * the List of Tracks. It is the only time the implementor is allowed to
