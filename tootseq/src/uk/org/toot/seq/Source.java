@@ -117,11 +117,10 @@ public abstract class Source extends Observable
  	 * Should be called from sync() when required.
  	 * When sync() is passed a tick value outside the range the be played
  	 * call this method with the first tick within the range to be played.
- 	 * @param millis
  	 * @param tick
  	 */
- 	protected void reposition(long millis, long tick) {
- 	    if ( control != null ) control.reposition(millis, tick);
+ 	protected void reposition(long tick) {
+ 	    if ( control != null ) control.reposition(tick);
  	}
  	
 	/**
@@ -165,6 +164,6 @@ public abstract class Source extends Observable
 	{
 	    public void setBpm(float bpm);
 	    
-	    public void reposition(long millis, long tick);	    
+	    public void reposition(long tick);	    
 	}
 }
