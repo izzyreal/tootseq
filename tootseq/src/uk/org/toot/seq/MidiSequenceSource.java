@@ -27,8 +27,8 @@ import uk.org.toot.midi.core.MidiTransport;
  * Broadly equivalent to the javasound Sequencer in that it uses a single
  * output for all tracks.
  * This class is not robust in the face of external edits to the Sequence.
+ * 
  * @author st
- *
  */
 public class MidiSequenceSource extends Source
 {

@@ -23,7 +23,6 @@ import java.util.Observable;
  * at a time.
  * 
  * @author st
- * 
  */
 public abstract class Source extends Observable
 {
@@ -67,9 +66,10 @@ public abstract class Source extends Observable
 	 * mutate the List of Tracks.
 	 * Failure to mutate the underlying List only in this method will likely result
 	 * in ConcurrentModificationExceptions being thrown.
+	 * This method should be overridden to support repositioning.
 	 * If the currentTick is outside the range to be played the implementation
-	 * should return an offset to reposition the client by.
-	 * @param currentTick the tick the client is currently at, useful for recording
+	 * should return an offset to reposition the Sequencer by.
+	 * @param currentTick the tick the Sequencer is currently at, useful for recording
 	 * @return the offset to apply to the tick for repositioning, 0 if none
 	 */
 	protected long sync(long currentTick) {

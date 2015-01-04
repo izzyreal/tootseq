@@ -8,7 +8,7 @@ package uk.org.toot.seq;
 import java.util.Observable;
 
 /**
- * Sequencer times events from Source Tracks in real-time. 
+ * Sequencer times events played back from a Source.
  *
  * @author st 
  */
@@ -16,17 +16,15 @@ public class Sequencer extends Observable
 {
     private static float MINUTES_PER_MILLISECOND = 1f / 60000;
 
-    private float tempoFactor = 1f;     // not reset by init 
-    
-    // these variables are initialised by init()
-    private float bpm;	
-    private int ticksPerQuarter;        // source resolution
-    private long tickPosition;		    // accumulated ticks
-    private float deltaTicks;           // pre-wrap delta
-
     private PlayEngine playEngine = null;
-    private Source source;
     private SynchronousControl control = new SynchronousControl();
+    private float tempoFactor = 1f;     // not reset     
+
+    private Source source;
+    private float bpm;                  // tempo, beats per minute
+    private int ticksPerQuarter;        // source resolution
+    private long tickPosition;          // accumulated ticks
+    private float deltaTicks;           // pre-wrap tick delta
 
     public void setSource(Source source) {
         if ( isRunning() ) {
@@ -34,7 +32,7 @@ public class Sequencer extends Observable
         }
         this.source = source;
         checkSource();
-        setBpm(120);
+        bpm = 120f;
         ticksPerQuarter = source.getResolution();
         tickPosition = 0;
         deltaTicks = 0f;
@@ -157,7 +155,7 @@ public class Sequencer extends Observable
         PlayEngine() {
             // nearly MAX_PRIORITY
             int priority = Thread.NORM_PRIORITY
-            + ((Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) * 3) / 4;
+                + ((Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) * 3) / 4;
             thread = new Thread(this);
             thread.setName("Toot Sequencer - "+source.getName());
             thread.setPriority(priority);
