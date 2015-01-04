@@ -16,17 +16,17 @@ public class Sequencer extends Observable
 {
     private static float MINUTES_PER_MILLISECOND = 1f / 60000;
 
-    private PlayEngine playEngine;
-    private boolean running = false;
+    private float tempoFactor = 1f;     // not reset by init 
+    private boolean running = false;    // must be initalised before init()
+    
+    // these variables are initialised by init()
     private float bpm;	
     private int ticksPerQuarter;        // source resolution
     private long tickPosition;		    // accumulated ticks
-    private float tempoFactor = 1f;     // tempu factor for bpm
-    
     private float deltaTicks;           // pre-wrap delta
 
+    private PlayEngine playEngine;
     private Source source;
-
     private SynchronousControl control = new SynchronousControl();
 
     public void setSource(Source source) {
@@ -133,6 +133,7 @@ public class Sequencer extends Observable
         setBpm(120);
         ticksPerQuarter = source.getResolution();
         tickPosition = 0;
+        deltaTicks = 0f;
     }
 
     protected void checkSource() {
@@ -155,6 +156,7 @@ public class Sequencer extends Observable
 
     // only to be called synchronously with real-time thread
     // typically through the SynchronousControl object
+    // if anything except the Source calls this the Source will get very confused
     protected void reposition(long tick) {
         tickPosition = tick;
     }
@@ -172,7 +174,7 @@ public class Sequencer extends Observable
             deltaTicks -= nTicks;
             tickPosition += nTicks;
             source.sync(tickPosition);
-            // repositioning means the current tick may have changed
+            // repositioning means the tick position may have changed
             source.playToTick(tickPosition);
         }
     }
