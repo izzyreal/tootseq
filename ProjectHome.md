@@ -1,0 +1,1 @@
+A refactoring of tootmidiseqng to avoid a dependency on MidiEvent
