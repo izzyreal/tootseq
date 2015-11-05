@@ -14,7 +14,7 @@ import java.util.Observable;
  */
 public class Sequencer extends Observable
 {
-    private static float MINUTES_PER_MILLISECOND = 1f / 60000;
+    private static float MINUTES_PER_MICROSECOND = 1f / 60000000;
 
     private PlayEngine playEngine = null;
     private SynchronousControl control = new SynchronousControl();
@@ -46,7 +46,7 @@ public class Sequencer extends Observable
     public void play() {
         checkSource();
         if ( isRunning() ) return;
-        playEngine = new PlayEngine();
+        playEngine = new PlayEngine(new MasterClock());
         setChanged();
         notifyObservers();      
     }
@@ -134,7 +134,7 @@ public class Sequencer extends Observable
     
     // sync if the tick changes during this timing interval
     protected void pump(int deltaMicros) {
-        float deltaMinutes = deltaMicros * 0.001f * MINUTES_PER_MILLISECOND;
+        float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
         deltaTicks += deltaMinutes * bpm * ticksPerQuarter * tempoFactor;
         if ( deltaTicks >= 1f ) {
             int nTicks = (int)deltaTicks;
@@ -151,8 +151,10 @@ public class Sequencer extends Observable
     {
         private Thread thread;
         private long prevMicros, nowMicros;
+        private Clock clock;
 
-        PlayEngine() {
+        PlayEngine(Clock clock) {
+            this.clock = clock;
             // nearly MAX_PRIORITY
             int priority = Thread.NORM_PRIORITY
                 + ((Thread.MAX_PRIORITY - Thread.NORM_PRIORITY) * 3) / 4;
@@ -177,7 +179,7 @@ public class Sequencer extends Observable
                     // ignore
                 }
                 nowMicros = getCurrentTimeMicros();
-                pump((int)(nowMicros - prevMicros));
+                clock.interval((int)(nowMicros - prevMicros));
                 prevMicros = nowMicros;
             }
             stopped(); // turns off active notes, resets some controllers
@@ -194,5 +196,34 @@ public class Sequencer extends Observable
             Sequencer.this.setBpm(bpm);
 
         }	    
+    }
+    
+    /**
+     * contract for handling microsecond time intervals
+     * typically by deriving tickPosition and calling sync()
+     * @author st
+     */
+    private interface Clock
+    {
+        public void interval(int deltaMicros);
+    }
+    
+    /**
+     * implementation for a master clock
+     * @author st
+     */
+    private class MasterClock implements Clock
+    {
+        @Override
+        public void interval(int deltaMicros) {
+            float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
+            deltaTicks += deltaMinutes * bpm * ticksPerQuarter * tempoFactor;
+            if ( deltaTicks >= 1f ) {
+                int nTicks = (int)deltaTicks;
+                deltaTicks -= nTicks;
+                tickPosition += nTicks;
+                sync();
+            }           
+        }        
     }
 }
