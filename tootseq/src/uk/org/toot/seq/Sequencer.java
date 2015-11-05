@@ -46,7 +46,7 @@ public class Sequencer extends Observable
     public void play() {
         checkSource();
         if ( isRunning() ) return;
-        playEngine = new PlayEngine(new MasterClock());
+        playEngine = new PlayEngine(clocksPerQuarter == 0 ? new MasterClock() : new SlaveClock());
         setChanged();
         notifyObservers();      
     }
@@ -128,7 +128,11 @@ public class Sequencer extends Observable
 
     // split out from pump so we can sync before first timing interval
     protected void sync() {
-       tickPosition += source.sync(tickPosition);
+       long offset = source.sync(tickPosition);
+       tickPosition += offset;
+       if ( offset != 0 ) {
+           lastTickPosition = tickPosition; // !!! concurrency safe? design safe?
+       }
        source.playToTick(tickPosition);
     }
     
@@ -225,5 +229,83 @@ public class Sequencer extends Observable
                 sync();
             }           
         }        
+    }
+    
+    // variables for SlaveClock
+    private long jamTickPosition;
+    private long lastTickPosition;
+    private long slaveClockMicros;
+    private int clockMultiplier;
+    private int clocksPerQuarter;
+    private float loopCoeff = 0.25f;
+ 
+    /**
+     * Pass 24 or 48 or similar for slave clocks, 0 for master clock
+     * @param pq
+     */
+    public void setClocksPerQuarter(int pq) {
+        if ( isRunning() ) return;
+        clocksPerQuarter = pq;
+        if ( clocksPerQuarter == 0 ) return; // master clock
+        clockMultiplier = ticksPerQuarter / clocksPerQuarter;
+        lastTickPosition = tickPosition; //?
+        slaveClockMicros = 0;
+    }
+    
+    /**
+     * Call on each external clock
+     */
+    public void clock() {
+        if ( clocksPerQuarter == 0 ) return; // master clock
+        jamTickPosition = lastTickPosition + clockMultiplier;
+        lastTickPosition = jamTickPosition; // because jamTickPosition is cleared by SlaveClock
+        long timeMicros = getCurrentTimeMicros();
+        if ( slaveClockMicros == 0 ) {
+            slaveClockMicros = timeMicros;
+            // first clock so we don't have an interval time yet
+            // so we don't update bpm and hope things sort themselves out before anyone notices :)
+            return;
+        }
+        long deltaMicros = timeMicros - slaveClockMicros;
+        slaveClockMicros = timeMicros;
+        float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
+        // since each clock corresponds to clockMultiplier ticks, borrowing from MasterClock
+        // clockMultiplier = deltaMinutes * bpm * ticksPerQuarter;
+        // bpm = clockMultiplier / (deltaMinutes * ticksPerQuarter);                    // rearranging for bpm
+        // bpm = ticksPerQuarter / (deltaMinutes * ticksPerQuarter * clockPerQuarter);  // substituting for clockMultiplier
+        float abpm = 1f / (deltaMinutes * clocksPerQuarter);                            // cancelling ticksperQuarter
+        bpm = loopCoeff * abpm + (1 - loopCoeff) * bpm;
+    }
+ 
+    /**
+     * implementation for a slave clock
+     * @author st
+     */
+    private class SlaveClock implements Clock
+    {
+        private int count;
+        
+        @Override
+        public void interval(int deltaMicros) {
+            if ( jamTickPosition > 0 ) {
+                tickPosition = jamTickPosition;
+                jamTickPosition = 0;
+                sync();
+                // prepare for interpolated ticks
+                deltaTicks = 0;
+                count = clockMultiplier - 1; // ticks to freerun interpolate
+                return;
+            }
+            float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
+            deltaTicks += deltaMinutes * bpm * ticksPerQuarter;
+            if ( deltaTicks >= 1f && count > 0 ) {
+                int nTicks = (int)deltaTicks;
+                deltaTicks -= nTicks;
+                tickPosition += nTicks;
+                sync();
+                count -= nTicks;
+            }
+        }
+        
     }
 }
