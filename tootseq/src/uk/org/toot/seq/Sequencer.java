@@ -9,6 +9,7 @@ import java.util.Observable;
 
 /**
  * Sequencer times events played back from a Source.
+ * Either Master or Slave timing
  *
  * @author st 
  */
@@ -34,6 +35,7 @@ public class Sequencer extends Observable
         checkSource();
         bpm = 120f;
         ticksPerQuarter = source.getResolution();
+        deriveClockMultiplier();
         tickPosition = 0;
         deltaTicks = 0f;
         source.control(control);
@@ -46,13 +48,13 @@ public class Sequencer extends Observable
     public void play() {
         checkSource();
         if ( isRunning() ) return;
-        playEngine = new PlayEngine(clocksPerQuarter == 0 ? new MasterClock() : new SlaveClock());
+        playEngine = new PlayEngine(createClock());
         setChanged();
         notifyObservers();      
     }
 
     /**
-     * Commence stopping.
+     * Commence stopping
      */
     public void stop() {
         if ( !isRunning() ) return;
@@ -104,6 +106,7 @@ public class Sequencer extends Observable
      * @return the tempo factor
      */
     public float getTempoFactor() {
+        if ( clocksPerQuarter != 0 ) return 1f; // slave clock ignores tempo factor
         return tempoFactor;
     }
 
@@ -136,18 +139,6 @@ public class Sequencer extends Observable
        source.playToTick(tickPosition);
     }
     
-    // sync if the tick changes during this timing interval
-    protected void pump(int deltaMicros) {
-        float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
-        deltaTicks += deltaMinutes * bpm * ticksPerQuarter * tempoFactor;
-        if ( deltaTicks >= 1f ) {
-            int nTicks = (int)deltaTicks;
-            deltaTicks -= nTicks;
-            tickPosition += nTicks;
-            sync();
-        }
-    }
-
     /**
      * PlayEngine encapsulates the real-time thread to avoid run() being public.
      */
@@ -198,8 +189,15 @@ public class Sequencer extends Observable
     {
         public void setBpm(float bpm) {
             Sequencer.this.setBpm(bpm);
-
         }	    
+    }
+    
+    /**
+     * Create the appropriate clock i.e. master or slave
+     * @return a Clock implementation
+     */
+    protected Clock createClock() {
+        return clocksPerQuarter == 0 ? new MasterClock() : new SlaveClock();
     }
     
     /**
@@ -232,24 +230,35 @@ public class Sequencer extends Observable
     }
     
     // variables for SlaveClock
-    private long jamTickPosition;
-    private long lastTickPosition;
-    private long slaveClockMicros;
-    private int clockMultiplier;
-    private int clocksPerQuarter;
+    private long jamTickPosition  = 0;
+    private long lastTickPosition = 0;
+    private long slaveClockMicros = 0;
+    private int clockMultiplier = 1;
+    private int clocksPerQuarter = 0;       // master clock
     private float loopCoeff = 0.25f;
  
     /**
      * Pass 24 or 48 or similar for slave clocks, 0 for master clock
-     * @param pq
+     * @param pq the clocks per quarter note, must be greater than ticksPerQuarter
      */
     public void setClocksPerQuarter(int pq) {
         if ( isRunning() ) return;
         clocksPerQuarter = pq;
         if ( clocksPerQuarter == 0 ) return; // master clock
-        clockMultiplier = ticksPerQuarter / clocksPerQuarter;
         lastTickPosition = tickPosition; //?
         slaveClockMicros = 0;
+        deriveClockMultiplier();
+    }
+    
+    /**
+     * called on setSource() and setClocksPerQuarter() such that clockMultiplier is derived
+     * correctly whichever call is made first when SlaveClock is used
+     */
+    protected void deriveClockMultiplier() {
+        if ( clocksPerQuarter == 0 || ticksPerQuarter == 0 ) return;    // too early or master rather than slave
+        assert (ticksPerQuarter % clocksPerQuarter) == 0;               // ensure clockMultiplier will be valid
+        assert ticksPerQuarter >= clocksPerQuarter;                     // ensure clockMultiplier will be valid
+        clockMultiplier = ticksPerQuarter / clocksPerQuarter;
     }
     
     /**
@@ -267,6 +276,7 @@ public class Sequencer extends Observable
             return;
         }
         long deltaMicros = timeMicros - slaveClockMicros;
+        if ( deltaMicros == 0 ) return;     // shouldn't happen but prevent a divide by zero
         slaveClockMicros = timeMicros;
         float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
         // since each clock corresponds to clockMultiplier ticks, borrowing from MasterClock
@@ -274,7 +284,8 @@ public class Sequencer extends Observable
         // bpm = clockMultiplier / (deltaMinutes * ticksPerQuarter);                    // rearranging for bpm
         // bpm = ticksPerQuarter / (deltaMinutes * ticksPerQuarter * clockPerQuarter);  // substituting for clockMultiplier
         float abpm = 1f / (deltaMinutes * clocksPerQuarter);                            // cancelling ticksperQuarter
-        bpm = loopCoeff * abpm + (1 - loopCoeff) * bpm;
+        if ( abpm > 300 ) return;                                                       // ignore bogus values
+        bpm = loopCoeff * abpm + (1f - loopCoeff) * bpm;
     }
  
     /**
@@ -283,7 +294,11 @@ public class Sequencer extends Observable
      */
     private class SlaveClock implements Clock
     {
-        private int count;
+        private int count = 0; // inhibit interpolation until jammed
+
+        public SlaveClock() {
+            assert clockMultiplier >= 1;                            // ensure clockMultiplier is valid
+        }
         
         @Override
         public void interval(int deltaMicros) {
