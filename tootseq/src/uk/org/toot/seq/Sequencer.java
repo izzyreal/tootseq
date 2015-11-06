@@ -129,12 +129,12 @@ public class Sequencer extends Observable
         return System.nanoTime() / 1000L;
     }
 
-    // split out from pump so we can sync before first timing interval
+    // split out from Clock.interval() so we can sync before first timing interval
     protected void sync() {
        long offset = source.sync(tickPosition);
        tickPosition += offset;
        if ( offset != 0 ) {
-           lastTickPosition = tickPosition; // !!! concurrency safe? design safe?
+           jamTickPosition = tickPosition;
        }
        source.playToTick(tickPosition);
     }
@@ -230,10 +230,10 @@ public class Sequencer extends Observable
     }
     
     // variables for SlaveClock
+    private boolean doJam = false;          // atomic inter-thread flag
     private long jamTickPosition  = 0;
-    private long lastTickPosition = 0;
-    private long slaveClockMicros = 0;
-    private int clockMultiplier = 1;
+    private long prevClockMicros = 0;
+    private int clockMultiplier = 0;
     private int clocksPerQuarter = 0;       // master clock
     private float loopCoeff = 0.25f;
  
@@ -245,8 +245,7 @@ public class Sequencer extends Observable
         if ( isRunning() ) return;
         clocksPerQuarter = pq;
         if ( clocksPerQuarter == 0 ) return; // master clock
-        lastTickPosition = tickPosition; //?
-        slaveClockMicros = 0;
+        prevClockMicros = 0;
         deriveClockMultiplier();
     }
     
@@ -263,29 +262,26 @@ public class Sequencer extends Observable
     
     /**
      * Call on each external clock
+     * Requires atomic variables for communication with PlayEngine thread
+     * i.e. boolean doJam and float bpm
      */
     public void clock() {
         if ( clocksPerQuarter == 0 ) return; // master clock
-        jamTickPosition = lastTickPosition + clockMultiplier;
-        lastTickPosition = jamTickPosition; // because jamTickPosition is cleared by SlaveClock
         long timeMicros = getCurrentTimeMicros();
-        if ( slaveClockMicros == 0 ) {
-            slaveClockMicros = timeMicros;
-            // first clock so we don't have an interval time yet
-            // so we don't update bpm and hope things sort themselves out before anyone notices :)
-            return;
+        if ( prevClockMicros == 0 ) {      // first clock so we don't have an interval time yet and can't estimate bpm
+            prevClockMicros = timeMicros;
+            doJam = true;
+            return;         
         }
-        long deltaMicros = timeMicros - slaveClockMicros;
-        if ( deltaMicros == 0 ) return;     // shouldn't happen but prevent a divide by zero
-        slaveClockMicros = timeMicros;
+        long deltaMicros = timeMicros - prevClockMicros;
+        if ( deltaMicros == 0 ) return;                                 // shouldn't happen but prevent a divide by zero
+        prevClockMicros = timeMicros;
         float deltaMinutes = deltaMicros * MINUTES_PER_MICROSECOND;
-        // since each clock corresponds to clockMultiplier ticks, borrowing from MasterClock
-        // clockMultiplier = deltaMinutes * bpm * ticksPerQuarter;
-        // bpm = clockMultiplier / (deltaMinutes * ticksPerQuarter);                    // rearranging for bpm
-        // bpm = ticksPerQuarter / (deltaMinutes * ticksPerQuarter * clockPerQuarter);  // substituting for clockMultiplier
-        float abpm = 1f / (deltaMinutes * clocksPerQuarter);                            // cancelling ticksperQuarter
-        if ( abpm > 300 ) return;                                                       // ignore bogus values
-        bpm = loopCoeff * abpm + (1f - loopCoeff) * bpm;
+        float abpm = 1f / (deltaMinutes * clocksPerQuarter);
+        if ( abpm <= 300 ) {                                            // ignore bogus values
+            bpm = loopCoeff * abpm + (1f - loopCoeff) * bpm;
+        }
+        doJam = true;
     }
  
     /**
@@ -297,14 +293,15 @@ public class Sequencer extends Observable
         private int count = 0; // inhibit interpolation until jammed
 
         public SlaveClock() {
-            assert clockMultiplier >= 1;                            // ensure clockMultiplier is valid
+            assert clockMultiplier >= 1;                                // ensure clockMultiplier is valid
         }
         
         @Override
         public void interval(int deltaMicros) {
-            if ( jamTickPosition > 0 ) {
+            if ( doJam ) {
+                doJam = false;                                          // quickly reset for next clock()
+                jamTickPosition += clockMultiplier;
                 tickPosition = jamTickPosition;
-                jamTickPosition = 0;
                 sync();
                 // prepare for interpolated ticks
                 deltaTicks = 0;
